@@ -260,6 +260,15 @@ function drawWelcomeScreen() {
 }
 
 function drawGameScreen() {
+    // Apply subtle camera shake when the player is stunned (trip effect)
+    ctx.save();
+    if (game.player.stunned) {
+        const intensity = Math.min(6, (game.player.stunTimer / game.player.stunDuration) * 6);
+        const shakeX = (Math.random() - 0.5) * intensity;
+        const shakeY = (Math.random() - 0.5) * intensity;
+        ctx.translate(shakeX, shakeY);
+    }
+
     // Sky gradient
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0, colors.skyBlue);
@@ -274,7 +283,7 @@ function drawGameScreen() {
     // Draw path/ground with perspective
     drawPath();
     
-    // Draw dinosaurs chasing (background)
+    // Draw dinosaurs chasing (background) - always drawn behind the player
     drawDinosaursChasingBackground();
     
     // Draw coins
@@ -308,6 +317,8 @@ function drawGameScreen() {
     // Show nearest dinosaur distance (chaser)
     const nearest = Math.min(...game.dinosaurs.map(d => Math.max(0, Math.floor(d.z))));
     ctx.fillText(`Chaser Dist: ${nearest}m`, 20, 130);
+
+    ctx.restore();
 }
 
 function drawPath() {
@@ -383,18 +394,23 @@ function drawDinosaursChasingBackground() {
     for (let dino of game.dinosaurs) {
         const centerX = canvas.width / 2 + game.pathOffset;
         // Convert z distance to screen Y and scale
-        const screenY = Math.min(canvas.height - 120, 380 - dino.z * 0.35);
-        const scale = Math.max(0.5, 1.6 - dino.z / 400);
+        const rawY = 380 - dino.z * 0.35;
+        // Always ensure dinos render behind the player (never overlap the player's front)
+        const screenY = Math.min(rawY, game.player.y - 30, canvas.height - 150);
+        // Prevent dinos from scaling beyond a reasonable size so they remain behind visually
+        const scale = Math.max(0.5, Math.min(1.0, 1.6 - dino.z / 400));
         const xOffset = (dino.x - centerX) * 0.6; // nudge towards center
         
-        // Draw a shadow under the dinosaur
-        const shadowRadius = 40 * scale;
-        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        // Draw a shadow under the dinosaur (fade with distance)
+        const shadowRadius = Math.max(18, 40 * scale);
+        const shadowAlpha = Math.max(0.08, Math.min(0.35, (1 - dino.z / 600)));
+        ctx.fillStyle = `rgba(0,0,0,${shadowAlpha})`;
         ctx.beginPath();
-        ctx.ellipse(centerX + xOffset, screenY + (30 * scale), shadowRadius, shadowRadius * 0.5, 0, 0, Math.PI * 2);
+        ctx.ellipse(centerX + xOffset, screenY + (24 * scale), shadowRadius, shadowRadius * 0.45, 0, 0, Math.PI * 2);
         ctx.fill();
         
-        drawDinosaurAtPosition(centerX + xOffset - (30 * scale), screenY - (10 * scale), 80 * scale, scale);
+        // Position the dinosaur so it always visually stays behind the runner
+        drawDinosaurAtPosition(centerX + xOffset - (28 * scale), screenY - (12 * scale), 80 * scale, scale);
     }
 }
 
@@ -403,56 +419,77 @@ function drawDinosaurAtPosition(x, y, size, scale) {
     const h = size * scale;
     const tailOffset = Math.sin(game.gameTime * 0.06) * 8 * scale;
     
-    // Body with gradient
-    const grad = ctx.createLinearGradient(x, y, x + w, y + h);
-    grad.addColorStop(0, '#154d15');
-    grad.addColorStop(1, '#2b7b2b');
-    ctx.fillStyle = grad;
+    // Slight body tilt to make the shape more organic
+    const bodyGrad = ctx.createLinearGradient(x - w/4, y, x + w, y + h);
+    bodyGrad.addColorStop(0, '#123d12');
+    bodyGrad.addColorStop(0.6, '#2a6e2a');
+    bodyGrad.addColorStop(1, '#185018');
+
+    // Main torso
+    ctx.fillStyle = bodyGrad;
     ctx.beginPath();
-    ctx.ellipse(x + w / 2, y + h / 2, w / 2.2, h / 2.4, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + w / 2, y + h / 2, w / 2.1, h / 2.6, -0.08, 0, Math.PI * 2);
     ctx.fill();
-    
-    // Tail
-    ctx.fillStyle = '#1a4d1a';
-    ctx.beginPath();
-    ctx.ellipse(x - w / 6 + tailOffset, y + h / 2, w / 5, h / 6, -0.4, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Head with shadow
-    ctx.fillStyle = '#0e3a0e';
-    ctx.beginPath();
-    ctx.ellipse(x + w - 12, y + 12, 18 * scale, 22 * scale, 0, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Mouth glow
-    ctx.fillStyle = '#FF6B6B';
-    ctx.beginPath();
-    ctx.ellipse(x + w - 10, y + 20, 12 * scale, 8 * scale, 0, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Eye (menacing)
-    ctx.fillStyle = '#FFD166';
-    ctx.beginPath();
-    ctx.arc(x + w - 2, y + 8, 4 * scale, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Teeth (sharper)
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 1.5 * scale;
+
+    // Back ridge / scales
+    ctx.fillStyle = '#0f3b0f';
     for (let i = 0; i < 4; i++) {
         ctx.beginPath();
-        ctx.moveTo(x + w - 18 + i * 6 * scale, y + 22);
-        ctx.lineTo(x + w - 14 + i * 6 * scale, y + 28);
-        ctx.stroke();
-    }
-    
-    // Some scales texture
-    ctx.fillStyle = 'rgba(255,255,255,0.03)';
-    for (let i = 0; i < 6; i++) {
-        ctx.beginPath();
-        ctx.ellipse(x + (i * 8 - 10) * scale, y + (i * 3) * scale, 5 * scale, 3 * scale, 0.6, 0, Math.PI * 2);
+        const rx = x + w/4 + i * (w*0.18);
+        const ry = y + h/6 + Math.sin(game.gameTime * 0.08 + i) * 1.5 * scale;
+        ctx.ellipse(rx, ry, 6*scale, 10*scale, -0.5, 0, Math.PI*2);
         ctx.fill();
     }
+
+    // Tail (dynamic)
+    ctx.fillStyle = '#163e16';
+    ctx.beginPath();
+    ctx.ellipse(x - w / 6 + tailOffset, y + h / 2 + 6 * scale, w / 6, h / 8, -0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Leg - suggestive but simple silhouette (keeps performance)
+    ctx.fillStyle = '#122e12';
+    ctx.beginPath();
+    ctx.ellipse(x + w/3, y + h - 6*scale, w/8, h/6, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.ellipse(x + (2*w)/3, y + h - 6*scale, w/8, h/6, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Head with sharper muzzle
+    ctx.fillStyle = '#0c3a0c';
+    ctx.beginPath();
+    ctx.ellipse(x + w - 12 * scale, y + 10 * scale, 16 * scale, 20 * scale, -0.1, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Nostrils / mouth details
+    ctx.fillStyle = '#b23b3b';
+    ctx.beginPath();
+    ctx.ellipse(x + w - 10 * scale, y + 18 * scale, 8 * scale, 5 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eye (small, focused)
+    ctx.fillStyle = '#FFD166';
+    ctx.beginPath();
+    ctx.arc(x + w - 2 * scale, y + 7 * scale, 3 * scale, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Teeth hint
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1 * scale;
+    for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x + w - 14 + i * 5 * scale, y + 20 * scale);
+        ctx.lineTo(x + w - 12 + i * 5 * scale, y + 24 * scale);
+        ctx.stroke();
+    }
+
+    // Subtle highlights for realism
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.beginPath();
+    ctx.ellipse(x + w/3, y + h/3, w/6, h/8, 0, 0, Math.PI*2);
+    ctx.fill();
 }
 
 function drawPlayerRunning() {
@@ -747,15 +784,20 @@ function update() {
 }
 
 function updateDinosaurs() {
-    // Dinosaurs close the gap over time; if the player trips they accelerate
+    // Dinosaurs close the gap over time; they accelerate if the player trips
     for (let dino of game.dinosaurs) {
-        // base speed that increases slowly over time
-        const speedFactor = dino.baseSpeed + (game.gameTime / 800);
-        const catchUpBoost = game.player.stunned ? 2.4 : 0.6;
+        const speedFactor = dino.baseSpeed + (game.gameTime / 1000);
+        const catchUpBoost = game.player.stunned ? 2.0 : 0.4;
         
-        // Reduce z to move dinos closer to the player
-        dino.z -= (speedFactor + catchUpBoost) * (1 + game.gameTime / 20000);
-        
+        // If the player is not stunned, dinos will close but they won't fully reach the player
+        if (!game.player.stunned) {
+            // keep a comfortable buffer (they stay behind unless the player trips)
+            dino.z = Math.max(60, dino.z - speedFactor * 0.45 * (1 + game.gameTime / 20000));
+        } else {
+            // When player is stunned, dinos aggressively close the gap
+            dino.z -= (speedFactor + catchUpBoost) * (1 + game.gameTime / 20000);
+        }
+
         // Slight lateral nudging so dinos aim toward the path center
         const targetX = canvas.width / 2 + game.pathOffset - 80;
         if (dino.x < targetX) {
@@ -764,8 +806,9 @@ function updateDinosaurs() {
             dino.x -= Math.min(2.5, speedFactor * 0.5);
         }
         
-        // When a dinosaur reaches very close, it's game over
-        if (dino.z <= 40) {
+        // Only capture when the player is stunned and the dino is extremely close
+        const captureDistance = 28;
+        if (game.player.stunned && dino.z <= captureDistance) {
             game.state = GAME_STATE.GAME_OVER;
         }
     }
