@@ -39,7 +39,10 @@ const game = {
         { id: 'godzilla', name: 'Godzilla Skin', cost: 30, unlocked: false },
         { id: 'kingkong', name: 'King Kong Skin', cost: 35, unlocked: false },
         { id: 'homer', name: 'Homer Skin', cost: 20, unlocked: false },
-        { id: 'bart', name: 'Bart Skin', cost: 25, unlocked: false }
+        { id: 'bart', name: 'Bart Skin', cost: 25, unlocked: false },
+        { id: 'spongebob', name: 'SpongeBob Skin', cost: 28, unlocked: false },
+        { id: 'trump', name: 'Donald Trump Skin', cost: 40, unlocked: false },
+        { id: 'bat_skateboard', name: 'Bat & Skateboard', cost: 18, unlocked: false }
     ],
     
     // Player object - human running away (now can be stunned)
@@ -165,7 +168,7 @@ document.addEventListener('keydown', (e) => {
         if (e.key === 'b' || e.key === 'B') {
             game.state = GAME_STATE.WELCOME;
         }
-        if (['1','2','3','4','5'].includes(e.key)) {
+        if (['1','2','3','4','5','6','7','8'].includes(e.key)) {
             handleShopInput(parseInt(e.key, 10) - 1);
         }
     }
@@ -283,18 +286,22 @@ function drawShopScreen() {
     ctx.fillStyle = colors.white;
     ctx.font = '24px Arial';
     ctx.fillText('Wallet: ' + game.wallet + ' coins', canvas.width / 2, 120);
-    ctx.fillText('Press 1-5 to Choose/Buy, B to go back', canvas.width / 2, 150);
+    ctx.fillText('Press 1-8 to Choose/Buy, B to go back', canvas.width / 2, 150);
 
+    const columns = 4;
     const boxWidth = 140;
     const boxHeight = 200;
     const spacing = 18;
-    const startX = canvas.width / 2 - (boxWidth * game.skins.length + spacing * (game.skins.length - 1)) / 2;
+    const totalWidth = columns * boxWidth + (columns - 1) * spacing;
+    const startX = canvas.width / 2 - totalWidth / 2;
     const startY = 180;
 
     for (let i = 0; i < game.skins.length; i++) {
         const skin = game.skins[i];
-        const x = startX + i * (boxWidth + spacing);
-        const y = startY;
+        const row = Math.floor(i / columns);
+        const col = i % columns;
+        const x = startX + col * (boxWidth + spacing);
+        const y = startY + row * (boxHeight + spacing);
         const selected = game.selectedSkin === skin.id;
 
         ctx.fillStyle = selected ? 'rgba(196, 160, 76, 0.2)' : 'rgba(255,255,255,0.06)';
@@ -388,6 +395,46 @@ function drawShopSkinPreview(cx, cy, skinId) {
         ctx.fillRect(-18, -6, 36, 20);
         ctx.fillStyle = '#444';
         ctx.fillRect(-22, 10, 44, 8);
+    } else if (skinId === 'spongebob') {
+        ctx.fillStyle = '#f7e54a';
+        ctx.fillRect(-18, -24, 36, 40);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-18, -4, 36, 14);
+        ctx.fillStyle = '#ce8b00';
+        ctx.fillRect(-18, 12, 36, 10);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(-8, -26, 4, 6);
+        ctx.fillRect(4, -26, 4, 6);
+        ctx.fillStyle = '#c92828';
+        ctx.fillRect(-6, -4, 12, 4);
+    } else if (skinId === 'trump') {
+        ctx.fillStyle = '#ffde7d';
+        ctx.fillRect(-14, -22, 28, 34);
+        ctx.fillStyle = '#f6cd7d';
+        ctx.fillRect(-14, -28, 28, 8);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-16, -2, 32, 10);
+        ctx.fillStyle = '#d62800';
+        ctx.fillRect(-6, 10, 12, 10);
+    } else if (skinId === 'bat_skateboard') {
+        ctx.fillStyle = '#81a0d7';
+        ctx.fillRect(-14, -22, 28, 34);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-26, 16, 52, 6);
+        ctx.beginPath();
+        ctx.moveTo(-24, 16);
+        ctx.lineTo(-32, 6);
+        ctx.lineTo(-22, 12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(24, 16);
+        ctx.lineTo(32, 6);
+        ctx.lineTo(22, 12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#222';
+        ctx.fillRect(-10, -6, 20, 4);
     }
     ctx.restore();
 }
@@ -729,6 +776,43 @@ function drawSelectedSkinPlayer(x, y, w, h) {
         ctx.fillRect(x - 6, y + h - 4, w + 12, 6);
         ctx.fillStyle = '#2d2d2d';
         ctx.fillRect(x + w - 12, y + 10, 4, 24);
+    } else if (skin === 'spongebob') {
+        ctx.fillStyle = '#f7e54a';
+        ctx.fillRect(x - 4, y - 22, w + 8, h - 16);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x - 4, y + 6, w + 8, 16);
+        ctx.fillStyle = '#ce8b00';
+        ctx.fillRect(x - 4, y + 22, w + 8, 10);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x + 6, y - 26, 4, 6);
+        ctx.fillRect(x + 20, y - 26, 4, 6);
+        ctx.fillStyle = '#c92828';
+        ctx.fillRect(x + 11, y + 6, 10, 4);
+    } else if (skin === 'trump') {
+        ctx.fillStyle = '#f9d084';
+        ctx.fillRect(x, y + 4, w, h - 20);
+        ctx.fillStyle = '#ffcc75';
+        ctx.fillRect(x, y - 10, w, 18);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x + 4, y + 10, w - 8, 10);
+        ctx.fillStyle = '#d62800';
+        ctx.fillRect(x + w / 2 - 6, y + 20, 12, 14);
+    } else if (skin === 'bat_skateboard') {
+        ctx.fillStyle = '#5a7dc6';
+        ctx.fillRect(x, y + 10, w, h - 22);
+        ctx.fillStyle = '#222';
+        ctx.fillRect(x - 8, y + h - 5, w + 16, 6);
+        ctx.fillStyle = '#999';
+        ctx.beginPath();
+        ctx.arc(x - 4, y + h - 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(x + w + 4, y + h - 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#f4e942';
+        ctx.fillRect(x + w - 10, y + 4, 4, 22);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(x - 12, y + 8, 10, 4);
     } else {
         ctx.fillStyle = '#8B6914';
         ctx.fillRect(x, y + 10, w, h - 20);
