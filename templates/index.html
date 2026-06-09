@@ -8,6 +8,11 @@
 </head>
 <body>
     <div class="container">
+        <div class="parallax">
+            <div class="layer layer-far"></div>
+            <div class="layer layer-mid"></div>
+            <div class="layer layer-near"></div>
+        </div>
         <canvas id="gameCanvas" width="800" height="600"></canvas>
     </div>
     <script src="{{ url_for('static', filename='game.js') }}"></script>

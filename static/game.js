@@ -6,20 +6,21 @@ const ctx = canvas.getContext('2d');
 
 // Jungle-themed colors
 const colors = {
-    darkGreen: '#225723',
-    lightGreen: '#4CAF50',
-    skyBlue: '#87CEEB',
-    golden: '#FFC107',
-    brown: '#664321',
-    darkBrown: '#3e2723',
-    white: '#FFFFFF',
-    red: '#E74C3C',
-    gray: '#888888'
+    darkGreen: '#1e3d1f',
+    lightGreen: '#2f6a38',
+    skyBlue: '#3f6b7f',
+    golden: '#f4c542',
+    brown: '#6b4e32',
+    darkBrown: '#2f1f13',
+    white: '#f5f2dd',
+    red: '#d14f31',
+    gray: '#7c7c7c'
 };
 
 // Game states
 const GAME_STATE = {
     WELCOME: 'welcome',
+    SHOP: 'shop',
     PLAYING: 'playing',
     GAME_OVER: 'game_over'
 };
@@ -31,11 +32,20 @@ const game = {
     coinsCollected: 0,
     gameTime: 0,
     speed: 5,
+    wallet: 0,
+    selectedSkin: 'default',
+    skins: [
+        { id: 'default', name: 'Runner', cost: 0, unlocked: true },
+        { id: 'godzilla', name: 'Godzilla Skin', cost: 30, unlocked: false },
+        { id: 'kingkong', name: 'King Kong Skin', cost: 35, unlocked: false },
+        { id: 'homer', name: 'Homer Skin', cost: 20, unlocked: false },
+        { id: 'bart', name: 'Bart Skin', cost: 25, unlocked: false }
+    ],
     
     // Player object - human running away (now can be stunned)
     player: {
         lane: 1, // 0 = left, 1 = middle, 2 = right
-        y: 320, // Position on screen (running in place)
+        y: 450, // Position on screen (running in place near the foreground)
         width: 40,
         height: 60,
         velocityY: 0,
@@ -44,13 +54,16 @@ const game = {
         gravity: 0.6,
         stunned: false,
         stunTimer: 0,
-        stunDuration: 90 // frames (~1.5s)
+        stunDuration: 90, // frames (~1.5s)
+        // trip/slow mechanic: count of recent trips; two trips -> caught
+        trips: 0,
+        slowTimer: 0
     },
     
-    // Dinosaurs chasing (background threat) — now track distance (z) to player
+    // Dinosaurs chasing from behind - z is distance behind the player
     dinosaurs: [
-        { x: 50, y: 250, width: 60, height: 60, baseSpeed: 2.8, z: 420 },
-        { x: 250, y: 280, width: 70, height: 65, baseSpeed: 2.6, z: 520 }
+        { x: 50, y: 250, width: 60, height: 60, baseSpeed: 2.8, z: 90 },
+        { x: 250, y: 280, width: 70, height: 65, baseSpeed: 2.6, z: 110 }
     ],
     
     // Path turning
@@ -59,9 +72,12 @@ const game = {
     // Obstacles array (tree limbs and coins)
     obstacles: [],
     coins: [],
+    monkeys: [],
     
     // Background scroll
     scrollOffset: 0,
+    // Speed scale applied when slowed by obstacles
+    speedScale: 1,
     
     // Keyboard input tracking
     keys: {
@@ -70,44 +86,11 @@ const game = {
         ArrowLeft: false,
         ArrowRight: false,
         ' ': false
-    },
-    
-    // Mario commentary system
-    mario: {
-        visible: false,
-        x: 650,
-        y: 150,
-        width: 40,
-        height: 50,
-        messageIndex: 0,
-        messageTimer: 0,
-        messageDisplayTime: 120,
-        isYapping: false
     }
 };
 
-// Mario's funny commentary
-const marioCommentary = [
-    'Mamma mia! RUN!',
-    'Let\'s-a-go faster!',
-    'So spicy! So jump!',
-    'Wahoo! Jump jump!',
-    'It\'s dangerous to go-a alone!',
-    'Okie dokie!',
-    'Yippee! Collect those coins!',
-    'Oof! That was close!',
-    'WAHOO! Keep going!',
-    'Mamma! The dinosaurs!',
-    'Grazie for running!',
-    'So beautiful, so jump!',
-    'Let\'s-a-gooooo!',
-    'Pipe up your game!',
-    'Yahoo! Almost there!',
-    'Bottoms up! And away!'
-];
-
 // Sound effect generator using Web Audio API
-function playMarioSound(frequency = 880, duration = 100, type = 'jump') {
+function playSoundEffect(frequency = 880, duration = 100, type = 'jump') {
     try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioContext.createOscillator();
@@ -117,17 +100,14 @@ function playMarioSound(frequency = 880, duration = 100, type = 'jump') {
         gainNode.connect(audioContext.destination);
         
         if (type === 'jump') {
-            // Ascending jump sound
             oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
             oscillator.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.1);
         } else if (type === 'coin') {
-            // Coin collect sound
-            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.15);
-        } else if (type === 'message') {
-            // Message bloop
-            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.5, audioContext.currentTime + duration / 1000);
+            oscillator.frequency.setValueAtTime(900, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(1300, audioContext.currentTime + 0.1);
+        } else if (type === 'hit') {
+            oscillator.frequency.setValueAtTime(220, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(180, audioContext.currentTime + duration / 1000);
         }
         
         gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
@@ -141,14 +121,27 @@ function playMarioSound(frequency = 880, duration = 100, type = 'jump') {
     }
 }
 
-// Show Mario's message
-function showMarioMessage() {
-    if (!game.mario.isYapping) {
-        game.mario.isYapping = true;
-        game.mario.messageTimer = game.mario.messageDisplayTime;
-        game.mario.messageIndex = Math.floor(Math.random() * marioCommentary.length);
-        game.mario.visible = true;
-        playMarioSound(600, 150, 'message');
+// Parallax layer updater (animates CSS background layers to create Temple Run feel)
+function updateParallaxLayers() {
+    try {
+        const far = document.querySelector('.layer-far');
+        const mid = document.querySelector('.layer-mid');
+        const near = document.querySelector('.layer-near');
+
+        if (far) {
+            const fx = -((game.scrollOffset * 0.06) + (game.pathOffset * 0.12));
+            far.style.transform = `translateX(${fx}px)`;
+        }
+        if (mid) {
+            const mx = -((game.scrollOffset * 0.12) + (game.pathOffset * 0.18));
+            mid.style.transform = `translateX(${mx}px)`;
+        }
+        if (near) {
+            const nx = -((game.scrollOffset * 0.36) + (game.pathOffset * 0.28));
+            near.style.transform = `translateX(${nx}px)`;
+        }
+    } catch (e) {
+        // DOM might not be ready in some embed contexts; ignore failures
     }
 }
 
@@ -162,6 +155,19 @@ document.addEventListener('keydown', (e) => {
     if ((e.key === ' ' || e.key === 'Enter') && game.state === GAME_STATE.WELCOME) {
         e.preventDefault();
         startGame();
+    }
+
+    if ((e.key === 's' || e.key === 'S') && game.state === GAME_STATE.WELCOME) {
+        game.state = GAME_STATE.SHOP;
+    }
+
+    if (game.state === GAME_STATE.SHOP) {
+        if (e.key === 'b' || e.key === 'B') {
+            game.state = GAME_STATE.WELCOME;
+        }
+        if (['1','2','3','4','5'].includes(e.key)) {
+            handleShopInput(parseInt(e.key, 10) - 1);
+        }
     }
     
     // Return to welcome with ESC
@@ -187,39 +193,44 @@ function startGame() {
     game.gameTime = 0;
     game.obstacles = [];
     game.coins = [];
+    game.monkeys = [];
     game.scrollOffset = 0;
     game.pathOffset = 0;
+    game.speedScale = 1;
     
     // Reset player position
     game.player.lane = 1;
+    game.player.y = 450;
     game.player.velocityY = 0;
     game.player.isJumping = false;
+    game.player.stunned = false;
+    game.player.stunTimer = 0;
+    game.player.slowTimer = 0;
+    game.player.trips = 0;
     
     // Reset dinosaurs
-    game.dinosaurs[0].x = 50;
-    game.dinosaurs[1].x = 250;
-    
-    // Reset Mario
-    game.mario.visible = true;
-    game.mario.isYapping = false;
-    game.mario.messageTimer = 0;
-    playMarioSound(800, 80, 'jump');
-    
-    // Show initial Mario message
-    setTimeout(() => showMarioMessage(), 200);
+    const centerX = canvas.width / 2 + game.pathOffset;
+    const playerY = game.player.y;
+    const laneX = createLanePosition(game.player.lane, centerX, playerY);
+    game.dinosaurs[0].x = laneX - 80;
+    game.dinosaurs[0].z = 92;
+    game.dinosaurs[1].x = laneX + 80;
+    game.dinosaurs[1].z = 108;
 }
+
 
 // Draw functions
 function drawWelcomeScreen() {
     // Sky gradient background
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0, colors.skyBlue);
-    gradient.addColorStop(1, colors.lightGreen);
+    gradient.addColorStop(0.6, colors.darkGreen);
+    gradient.addColorStop(1, '#121e12');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Draw jungle scenery
-    drawBackgroundTrees(0);
+    // Draw temple scenery
+    drawTempleRuins(0);
     
     // Title with shadow
     ctx.fillStyle = colors.darkBrown;
@@ -233,7 +244,7 @@ function drawWelcomeScreen() {
     // Subtitle
     ctx.fillStyle = colors.white;
     ctx.font = '40px Arial';
-    ctx.fillText('Timber Run Adventure!', canvas.width / 2, 170);
+    ctx.fillText('Temple Run Escape!', canvas.width / 2, 170);
     
     // Instructions
     ctx.fillStyle = colors.white;
@@ -241,12 +252,13 @@ function drawWelcomeScreen() {
     ctx.textAlign = 'center';
     
     const instructions = [
-        'RUN AWAY FROM THE DINOSAURS!',
-        'Jump over tree limbs with UP ARROW',
-        'Collect coins for points',
-        'Move left and right to dodge obstacles',
+        'RUN FROM THE TEMPLE DINO HORDES!',
+        'Jump over ruins and obstacles with UP ARROW',
+        'Collect coins and stay ahead',
+        'Dodge left/right to keep the chase going',
         '',
         'Press SPACE or ENTER to Start',
+        'Press S for Shop',
         'Press ESC to Quit'
     ];
     
@@ -259,7 +271,131 @@ function drawWelcomeScreen() {
     }
 }
 
+function drawShopScreen() {
+    ctx.fillStyle = 'rgba(8, 20, 14, 0.96)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = colors.golden;
+    ctx.font = 'bold 60px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('SHOP', canvas.width / 2, 80);
+
+    ctx.fillStyle = colors.white;
+    ctx.font = '24px Arial';
+    ctx.fillText('Wallet: ' + game.wallet + ' coins', canvas.width / 2, 120);
+    ctx.fillText('Press 1-5 to Choose/Buy, B to go back', canvas.width / 2, 150);
+
+    const boxWidth = 140;
+    const boxHeight = 200;
+    const spacing = 18;
+    const startX = canvas.width / 2 - (boxWidth * game.skins.length + spacing * (game.skins.length - 1)) / 2;
+    const startY = 180;
+
+    for (let i = 0; i < game.skins.length; i++) {
+        const skin = game.skins[i];
+        const x = startX + i * (boxWidth + spacing);
+        const y = startY;
+        const selected = game.selectedSkin === skin.id;
+
+        ctx.fillStyle = selected ? 'rgba(196, 160, 76, 0.2)' : 'rgba(255,255,255,0.06)';
+        ctx.fillRect(x, y, boxWidth, boxHeight);
+        ctx.strokeStyle = selected ? colors.golden : 'rgba(255,255,255,0.18)';
+        ctx.lineWidth = selected ? 3 : 1;
+        ctx.strokeRect(x, y, boxWidth, boxHeight);
+
+        drawShopSkinPreview(x + boxWidth / 2, y + 65, skin.id);
+
+        ctx.fillStyle = colors.white;
+        ctx.font = '18px Arial';
+        ctx.fillText((i + 1) + '. ' + skin.name, x + boxWidth / 2, y + 130);
+
+        ctx.font = '16px Arial';
+        if (skin.unlocked) {
+            ctx.fillStyle = colors.golden;
+            ctx.fillText('OWNED', x + boxWidth / 2, y + 155);
+        } else {
+            ctx.fillStyle = colors.white;
+            ctx.fillText('Cost: ' + skin.cost, x + boxWidth / 2, y + 155);
+        }
+    }
+}
+
+function handleShopInput(index) {
+    const skin = game.skins[index];
+    if (!skin) return;
+    if (skin.unlocked) {
+        game.selectedSkin = skin.id;
+        playSoundEffect(780, 100, 'coin');
+        return;
+    }
+    if (game.wallet >= skin.cost) {
+        game.wallet -= skin.cost;
+        skin.unlocked = true;
+        game.selectedSkin = skin.id;
+        playSoundEffect(920, 140, 'coin');
+    } else {
+        playSoundEffect(200, 220, 'hit');
+    }
+}
+
+function drawShopSkinPreview(cx, cy, skinId) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = '#3c3c3c';
+    ctx.fillRect(-32, -28, 64, 56);
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-32, -28, 64, 56);
+
+    if (skinId === 'default') {
+        ctx.fillStyle = '#8B6914';
+        ctx.fillRect(-14, -18, 28, 32);
+        ctx.fillStyle = '#D2B48C';
+        ctx.beginPath();
+        ctx.arc(0, -24, 10, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (skinId === 'godzilla') {
+        ctx.fillStyle = '#1f5e1f';
+        ctx.fillRect(-16, -18, 32, 34);
+        ctx.fillStyle = '#2ba72b';
+        for (let i = -16; i <= 16; i += 8) {
+            ctx.beginPath();
+            ctx.moveTo(i, -18);
+            ctx.lineTo(i + 4, -28);
+            ctx.lineTo(i + 8, -18);
+            ctx.fill();
+        }
+    } else if (skinId === 'kingkong') {
+        ctx.fillStyle = '#422a14';
+        ctx.fillRect(-18, -22, 36, 38);
+        ctx.fillStyle = '#2f1f0f';
+        ctx.beginPath();
+        ctx.arc(0, -26, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#4d2e14';
+        ctx.fillRect(-12, -2, 24, 18);
+    } else if (skinId === 'homer') {
+        ctx.fillStyle = '#f7d54c';
+        ctx.fillRect(-14, -22, 28, 32);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-14, -28, 28, 8);
+    } else if (skinId === 'bart') {
+        ctx.fillStyle = '#f7d54c';
+        ctx.beginPath();
+        ctx.arc(0, -28, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#f26422';
+        ctx.fillRect(-18, -6, 36, 20);
+        ctx.fillStyle = '#444';
+        ctx.fillRect(-22, 10, 44, 8);
+    }
+    ctx.restore();
+}
+
 function drawGameScreen() {
+    // Update parallax layers behind the canvas
+    updateParallaxLayers();
+
     // Apply subtle camera shake when the player is stunned (trip effect)
     ctx.save();
     if (game.player.stunned) {
@@ -272,13 +408,18 @@ function drawGameScreen() {
     // Sky gradient
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0, colors.skyBlue);
-    gradient.addColorStop(0.4, '#90EE90');
-    gradient.addColorStop(1, colors.lightGreen);
+    gradient.addColorStop(0.4, colors.darkGreen);
+    gradient.addColorStop(1, '#122010');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Draw background trees (far away, small)
-    drawBackgroundTrees(game.scrollOffset * 0.2);
+    // Draw temple ruins and towers in the distance
+    drawTempleRuins(game.scrollOffset * 0.2);
+
+    // Draw monkeys in the midground
+    for (let m of game.monkeys) {
+        drawMonkey(m);
+    }
     
     // Draw path/ground with perspective
     drawPath();
@@ -299,117 +440,123 @@ function drawGameScreen() {
     // Draw player (human running)
     drawPlayerRunning();
     
-    // Draw Mario on the side
-    if (game.mario.visible) {
-        drawMario();
-        if (game.mario.isYapping) {
-            drawMarioMessage();
-        }
-    }
-    
     // Draw HUD
     ctx.fillStyle = colors.golden;
     ctx.font = 'bold 28px Arial';
     ctx.textAlign = 'left';
     ctx.fillText(`Distance: ${game.score}m`, 20, 40);
     ctx.fillText(`Coins: ${game.coinsCollected}`, 20, 70);
-    ctx.fillText(`Speed: ${game.speed.toFixed(1)}`, 20, 100);
+    ctx.fillText(`Wallet: ${game.wallet}`, 20, 100);
+    ctx.fillText(`Speed: ${game.speed.toFixed(1)}`, 20, 130);
     // Show nearest dinosaur distance (chaser)
     const nearest = Math.min(...game.dinosaurs.map(d => Math.max(0, Math.floor(d.z))));
-    ctx.fillText(`Chaser Dist: ${nearest}m`, 20, 130);
+    ctx.fillText(`Chaser Dist: ${nearest}m`, 20, 160);
 
     ctx.restore();
 }
 
 function drawPath() {
-    // Perspective path drawing - appears to go into distance
-    const pathWidth = 150;
     const centerX = canvas.width / 2 + game.pathOffset;
-    
-    // Draw multiple road segments to create 3D effect
-    for (let i = 0; i < 15; i++) {
-        const z = i * 40; // Distance from camera
-        const screenY = 400 + z;
-        
-        if (screenY > canvas.height) continue;
-        
-        // Calculate perspective scaling
-        const newZ = (i + 1) * 40;
-        const nextScreenY = 400 + newZ;
-        
-        // Road segment (trapezoid for perspective)
-        const width1 = pathWidth * (1 - i * 0.05);
-        const width2 = pathWidth * (1 - (i + 1) * 0.05);
-        
-        ctx.fillStyle = i % 2 === 0 ? '#8B7355' : '#A0826D';
+    const horizonY = 140;
+    const legs = 16;
+
+    for (let i = 0; i < legs; i++) {
+        const t = i / (legs - 1);
+        const screenY = horizonY + t * (canvas.height - horizonY - 40);
+        const nextY = horizonY + (i + 1) / (legs - 1) * (canvas.height - horizonY - 40);
+        const width1 = 100 + t * 320;
+        const width2 = 100 + ((i + 1) / (legs - 1)) * 320;
+
+        ctx.fillStyle = i % 2 === 0 ? '#5b451f' : '#6d5731';
         ctx.beginPath();
         ctx.moveTo(centerX - width1 / 2, screenY);
         ctx.lineTo(centerX + width1 / 2, screenY);
-        ctx.lineTo(centerX + width2 / 2, nextScreenY);
-        ctx.lineTo(centerX - width2 / 2, nextScreenY);
+        ctx.lineTo(centerX + width2 / 2, nextY);
+        ctx.lineTo(centerX - width2 / 2, nextY);
         ctx.closePath();
         ctx.fill();
-        
-        // Lane dividers
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.22)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(centerX - width1 / 2, screenY);
+        ctx.lineTo(centerX - width2 / 2, nextY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(centerX + width1 / 2, screenY);
+        ctx.lineTo(centerX + width2 / 2, nextY);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(245, 210, 125, 0.35)';
         ctx.lineWidth = 2;
+        ctx.setLineDash([14, 18]);
         ctx.beginPath();
         ctx.moveTo(centerX - width1 / 6, screenY);
-        ctx.lineTo(centerX - width2 / 6, nextScreenY);
+        ctx.lineTo(centerX - width2 / 6, nextY);
         ctx.stroke();
-        
         ctx.beginPath();
         ctx.moveTo(centerX + width1 / 6, screenY);
-        ctx.lineTo(centerX + width2 / 6, nextScreenY);
+        ctx.lineTo(centerX + width2 / 6, nextY);
         ctx.stroke();
+        ctx.setLineDash([]);
     }
 }
 
-function drawBackgroundTrees(offset) {
-    // Left trees
-    for (let i = 0; i < 3; i++) {
-        const x = -200 + i * 300 + offset;
-        ctx.fillStyle = colors.brown;
-        ctx.fillRect(x, 100, 40, 150);
-        ctx.fillStyle = colors.darkGreen;
-        ctx.beginPath();
-        ctx.ellipse(x + 20, 80, 60, 80, 0, 0, Math.PI * 2);
-        ctx.fill();
+function drawTempleRuins(offset) {
+    const centerX = canvas.width / 2;
+    // distant temple mound & fading jungle
+    ctx.fillStyle = 'rgba(50, 80, 50, 0.8)';
+    ctx.beginPath();
+    ctx.moveTo(0, 420);
+    ctx.quadraticCurveTo(200, 300, 400, 360);
+    ctx.quadraticCurveTo(600, 300, 800, 420);
+    ctx.lineTo(800, 600);
+    ctx.lineTo(0, 600);
+    ctx.closePath();
+    ctx.fill();
+
+    // temple towers and broken archways
+    const ruins = [120, 260, 520, 680];
+    for (let i = 0; i < ruins.length; i++) {
+        const x = ruins[i] + Math.sin((game.gameTime + i * 30) * 0.002) * 12 + offset * 0.1;
+        const height = 120 + (i % 2) * 30;
+        ctx.fillStyle = '#241a10';
+        ctx.fillRect(x - 16, 340 - height, 32, height);
+        ctx.fillStyle = '#3b2f22';
+        ctx.fillRect(x - 24, 340 - (height * 0.5), 8, height * 0.5);
+        ctx.fillRect(x + 16, 340 - (height * 0.5), 8, height * 0.5);
+        if (i % 2 === 0) {
+            ctx.fillStyle = '#5e432e';
+            ctx.fillRect(x - 12, 340 - height + 10, 24, 20);
+        }
     }
-    
-    // Right trees
-    for (let i = 0; i < 3; i++) {
-        const x = canvas.width - 100 + i * 300 + offset;
-        ctx.fillStyle = colors.brown;
-        ctx.fillRect(x, 120, 40, 130);
-        ctx.fillStyle = colors.darkGreen;
+
+    // temple lanterns along horizon
+    for (let i = 0; i < 6; i++) {
+        const x = 80 + i * 120 + offset * 0.15;
+        ctx.fillStyle = '#c9983c';
         ctx.beginPath();
-        ctx.ellipse(x + 20, 100, 55, 75, 0, 0, Math.PI * 2);
+        ctx.ellipse(x, 365, 6, 10, 0, 0, Math.PI * 2);
         ctx.fill();
     }
 }
 
 function drawDinosaursChasingBackground() {
-    // Draw each dino with perspective based on their z (distance)
+    // Draw each dino as a chaser behind the player
     for (let dino of game.dinosaurs) {
         const centerX = canvas.width / 2 + game.pathOffset;
-        // Convert z distance to screen Y and scale
-        const rawY = 380 - dino.z * 0.35;
-        // Always ensure dinos render behind the player (never overlap the player's front)
-        const screenY = Math.min(rawY, game.player.y - 30, canvas.height - 150);
-        // Prevent dinos from scaling beyond a reasonable size so they remain behind visually
-        const scale = Math.max(0.5, Math.min(1.0, 1.6 - dino.z / 400));
-        const xOffset = (dino.x - centerX) * 0.6; // nudge towards center
-        
-        // Draw a shadow under the dinosaur (fade with distance)
+        const playerY = game.player.y;
+        const screenY = playerY + 24 + dino.z * 0.22;
+        const scale = Math.max(0.48, Math.min(0.85, 0.85 - dino.z * 0.0028));
+        const xOffset = (dino.x - centerX) * 0.6;
+
         const shadowRadius = Math.max(18, 40 * scale);
-        const shadowAlpha = Math.max(0.08, Math.min(0.35, (1 - dino.z / 600)));
+        const shadowAlpha = Math.max(0.05, Math.min(0.28, (1 - dino.z / 160)));
         ctx.fillStyle = `rgba(0,0,0,${shadowAlpha})`;
         ctx.beginPath();
-        ctx.ellipse(centerX + xOffset, screenY + (24 * scale), shadowRadius, shadowRadius * 0.45, 0, 0, Math.PI * 2);
+        ctx.ellipse(centerX + xOffset, screenY + (18 * scale), shadowRadius, shadowRadius * 0.4, 0, 0, Math.PI * 2);
         ctx.fill();
-        
-        // Position the dinosaur so it always visually stays behind the runner
+
         drawDinosaurAtPosition(centerX + xOffset - (28 * scale), screenY - (12 * scale), 80 * scale, scale);
     }
 }
@@ -508,56 +655,107 @@ function drawPlayerRunning() {
     
     // If stunned, show tumble pose
     if (game.player.stunned) {
-        // body slumped, arms flailing
         ctx.fillStyle = '#7B5E2B';
         ctx.fillRect(x, y + 18, w, h - 20);
-        // head tilted
         ctx.fillStyle = '#D2B48C';
         ctx.beginPath();
         ctx.ellipse(x + w / 2 + 6, y - 4, w / 2.2, w / 2.6, -0.4, 0, Math.PI * 2);
         ctx.fill();
-        // flailing legs
         const legAngle = Math.sin(game.gameTime * 0.2) * 6;
         ctx.fillStyle = '#555555';
         ctx.fillRect(x + 4, y + h - 10 + legAngle, 4, 14);
         ctx.fillRect(x + w - 8, y + h - 10 - legAngle, 4, 14);
-        // dust puff
         ctx.fillStyle = 'rgba(200,200,200,0.6)';
         ctx.beginPath();
         ctx.arc(x + w/2 + 10, y + h - 8, 10, 0, Math.PI * 2);
         ctx.fill();
     } else {
-        // normal running style but improved
-        ctx.fillStyle = '#8B6914';
-        ctx.fillRect(x, y + 10, w, h - 20);
-        // head
-        ctx.fillStyle = '#D2B48C';
-        ctx.beginPath();
-        ctx.arc(x + w / 2, y, w / 2.2, 0, Math.PI * 2);
-        ctx.fill();
-        // backpack with highlight
-        ctx.fillStyle = '#5b3b1a';
-        ctx.fillRect(x + w / 4, y + 6, w / 2, h / 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        ctx.fillRect(x + w / 4 + 2, y + 8, w / 2 - 4, h / 2 - 4);
-        // legs animated
-        const legOffset = Math.sin(game.gameTime * 0.14) * 5;
-        ctx.fillStyle = '#555555';
-        ctx.fillRect(x + 4, y + h - 15 + legOffset, 6, 15);
-        ctx.fillRect(x + w - 12, y + h - 15 - legOffset, 6, 15);
+        drawSelectedSkinPlayer(x, y, w, h);
     }
     ctx.restore();
 }
 
+function drawSelectedSkinPlayer(x, y, w, h) {
+    const skin = game.selectedSkin;
+    if (skin === 'godzilla') {
+        ctx.fillStyle = '#2f6f2f';
+        ctx.fillRect(x, y + 10, w, h - 24);
+        ctx.fillStyle = '#1f4f1f';
+        ctx.fillRect(x + 4, y + 6, w - 8, 18);
+        ctx.fillStyle = '#79c879';
+        for (let i = 0; i < 4; i++) {
+            ctx.beginPath();
+            const px = x + 6 + i * 8;
+            ctx.moveTo(px, y + 4);
+            ctx.lineTo(px + 4, y - 6);
+            ctx.lineTo(px + 8, y + 4);
+            ctx.fill();
+        }
+        ctx.fillStyle = '#222';
+        ctx.fillRect(x + 10, y + h - 15, 6, 16);
+        ctx.fillRect(x + w - 16, y + h - 15, 6, 16);
+    } else if (skin === 'kingkong') {
+        ctx.fillStyle = '#4f321e';
+        ctx.fillRect(x, y + 6, w, h - 20);
+        ctx.fillStyle = '#3b220f';
+        ctx.fillRect(x, y + 6, w, 20);
+        ctx.fillStyle = '#2d1c0d';
+        ctx.beginPath();
+        ctx.arc(x + w / 2, y - 6, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1b0f06';
+        ctx.fillRect(x + 8, y + h - 16, 8, 16);
+        ctx.fillRect(x + w - 16, y + h - 16, 8, 16);
+    } else if (skin === 'homer') {
+        ctx.fillStyle = '#f3d756';
+        ctx.fillRect(x, y + 4, w, h - 24);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x + 4, y + 6, w - 8, 18);
+        ctx.fillStyle = '#f3d756';
+        ctx.beginPath();
+        ctx.arc(x + w / 2, y - 2, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(x + w / 3 - 4, y + h - 16, 8, 16);
+        ctx.fillRect(x + (2 * w) / 3 - 4, y + h - 16, 8, 16);
+    } else if (skin === 'bart') {
+        ctx.fillStyle = '#f3d756';
+        ctx.beginPath();
+        ctx.arc(x + w / 2, y - 10, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ff6200';
+        ctx.fillRect(x, y + 4, w, h - 20);
+        ctx.fillStyle = '#444';
+        ctx.fillRect(x - 6, y + h - 4, w + 12, 6);
+        ctx.fillStyle = '#2d2d2d';
+        ctx.fillRect(x + w - 12, y + 10, 4, 24);
+    } else {
+        ctx.fillStyle = '#8B6914';
+        ctx.fillRect(x, y + 10, w, h - 20);
+        ctx.fillStyle = '#D2B48C';
+        ctx.beginPath();
+        ctx.arc(x + w / 2, y, w / 2.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#5b3b1a';
+        ctx.fillRect(x + w / 4, y + 6, w / 2, h / 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(x + w / 4 + 2, y + 8, w / 2 - 4, h / 2 - 4);
+    }
+    const legOffset = Math.sin(game.gameTime * 0.14) * 5;
+    ctx.fillStyle = '#555555';
+    ctx.fillRect(x + 4, y + h - 15 + legOffset, 6, 15);
+    ctx.fillRect(x + w - 12, y + h - 15 - legOffset, 6, 15);
+}
+
 function drawObstacle(obstacle) {
-    const screenY = 400 + obstacle.z * 2;
+    const screenY = projectZ(obstacle.z);
     
     // Only draw if on screen
-    if (screenY > 200 && screenY < canvas.height) {
+    if (screenY > 120 && screenY < canvas.height) {
         const centerX = canvas.width / 2 + game.pathOffset;
         
         // Perspective scaling
-        const scale = 1 - obstacle.z / 500;
+        const scale = Math.max(0.3, 1 - obstacle.z / 500);
         const width = 80 * scale;
         
         // Get lane position
@@ -590,12 +788,12 @@ function drawObstacle(obstacle) {
 }
 
 function drawCoin(coin) {
-    const screenY = 400 + coin.z * 2;
+    const screenY = projectZ(coin.z);
     
     // Only draw if on screen
-    if (screenY > 200 && screenY < canvas.height) {
+    if (screenY > 120 && screenY < canvas.height) {
         const centerX = canvas.width / 2 + game.pathOffset;
-        const scale = 1 - coin.z / 500;
+        const scale = Math.max(0.35, 1 - coin.z / 500);
         const radius = 8 * scale;
         
         const laneX = createLanePosition(coin.lane, centerX, screenY);
@@ -621,126 +819,24 @@ function drawCoin(coin) {
     }
 }
 
+function projectZ(z) {
+    // Convert world distance to screen Y for perspective
+    // Larger z = farther away, closer to the horizon.
+    const minY = 140;
+    const maxY = 520;
+    const clampedZ = Math.max(0, Math.min(560, z));
+    return maxY - clampedZ * 0.65;
+}
+
 function createLanePosition(lane, centerX, screenY) {
-    // Create lane positions with perspective
-    const pathWidth = 150 * (1 - (500 - (screenY - 400) / 2) / 500);
-    const laneWidth = pathWidth / 3;
-    
-    let laneX = centerX;
-    if (lane === 0) laneX -= laneWidth / 2;
-    else if (lane === 2) laneX += laneWidth / 2;
-    
-    return laneX;
-}
-
-function drawMario() {
-    const x = game.mario.x;
-    const y = game.mario.y;
-    const w = game.mario.width;
-    const h = game.mario.height;
-    
-    // Mario's iconic red hat
-    ctx.fillStyle = '#E63946';
-    ctx.fillRect(x + 5, y, w - 10, h / 3);
-    ctx.fillRect(x, y + h / 3, w, h / 6);
-    
-    // White circle on hat
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(x + w / 2, y + h / 6, 4, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Face (yellow/tan)
-    ctx.fillStyle = '#F4D03F';
-    ctx.beginPath();
-    ctx.arc(x + w / 2, y + h / 2, w / 2.5, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Eyes (big and expressive)
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.arc(x + w / 3, y + h / 2.2, 3, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.beginPath();
-    ctx.arc(x + (2 * w) / 3, y + h / 2.2, 3, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Eye shine
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(x + w / 3 + 1, y + h / 2.2 - 1, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.beginPath();
-    ctx.arc(x + (2 * w) / 3 + 1, y + h / 2.2 - 1, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Mustache (iconic!)
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(x + w / 2, y + h / 1.8, 6, 0, Math.PI, true);
-    ctx.stroke();
-    
-    // Smile
-    ctx.beginPath();
-    ctx.arc(x + w / 2, y + h / 1.6, 5, 0, Math.PI);
-    ctx.stroke();
-    
-    // Body (blue overalls)
-    ctx.fillStyle = '#0066CC';
-    ctx.fillRect(x, y + h / 1.5, w, h / 3);
-    
-    // Overalls buttons
-    ctx.fillStyle = '#FFD700';
-    ctx.beginPath();
-    ctx.arc(x + w / 3, y + h / 1.3, 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x + (2 * w) / 3, y + h / 1.3, 2, 0, Math.PI * 2);
-    ctx.fill();
-}
-
-function drawMarioMessage() {
-    const message = marioCommentary[game.mario.messageIndex];
-    const bubbleX = game.mario.x - 80;
-    const bubbleY = game.mario.y - 40;
-    const bubbleWidth = 160;
-    const bubbleHeight = 35;
-    
-    // Speech bubble background (rounded)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.beginPath();
-    ctx.roundRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 8);
-    ctx.fill();
-    
-    // Speech bubble border
-    ctx.strokeStyle = '#333333';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 8);
-    ctx.stroke();
-    
-    // Speech bubble tail pointing to Mario
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.beginPath();
-    ctx.moveTo(game.mario.x + 20, game.mario.y);
-    ctx.lineTo(game.mario.x + 10, game.mario.y - 5);
-    ctx.lineTo(game.mario.x + 25, game.mario.y - 15);
-    ctx.closePath();
-    ctx.fill();
-    
-    ctx.strokeStyle = '#333333';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    
-    // Text
-    ctx.fillStyle = '#333333';
-    ctx.font = 'bold 12px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(message, bubbleX + bubbleWidth / 2, bubbleY + bubbleHeight / 2);
+    // Create lane positions with perspective based on screen Y
+    const minPathWidth = 120;
+    const maxPathWidth = 420;
+    const horizonY = 140;
+    const normalized = Math.max(0, Math.min(1, (screenY - horizonY) / (canvas.height - horizonY)));
+    const pathWidth = minPathWidth + (maxPathWidth - minPathWidth) * normalized;
+    const laneOffset = (lane - 1) * (pathWidth / 3);
+    return centerX + laneOffset;
 }
 
 // Update game logic
@@ -754,8 +850,17 @@ function update() {
         game.score = Math.floor(game.gameTime / 20); // Display distance in meters
         
         // Increase speed over time - dinosaurs get faster!
-        game.speed = 5 + (game.gameTime / 400);
-        
+        const baseSpeed = 5 + (game.gameTime / 400);
+        // Apply temporary slow multiplier (from trips)
+        if (game.player.slowTimer > 0) {
+            game.player.slowTimer--;
+            game.speedScale = 0.6;
+            if (game.player.slowTimer <= 0) {
+                game.speedScale = 1;
+            }
+        }
+        game.speed = baseSpeed * (game.speedScale || 1);
+
         // Update scroll offset for animation
         game.scrollOffset += game.speed;
         
@@ -772,11 +877,20 @@ function update() {
         const spawnRate = Math.max(30, 80 - game.gameTime / 60);
         if (game.gameTime % spawnRate === 0) {
             createObstacleOrCoin();
+            // occasionally spawn a dinosaur alongside obstacles for simultaneous threats
+            if (Math.random() < 0.28) {
+                spawnDinosaur();
+            }
+            // occasionally spawn a monkey for visual/obstacle variety
+            if (Math.random() < 0.12) {
+                spawnMonkey();
+            }
         }
         
-        // Update obstacles and coins
+        // Update obstacles, coins and monkeys
         updateObstacles();
         updateCoins();
+        updateMonkeys();
         
         // Check collisions
         checkCollisions();
@@ -784,34 +898,42 @@ function update() {
 }
 
 function updateDinosaurs() {
-    // Dinosaurs close the gap over time; they accelerate if the player trips
-    for (let dino of game.dinosaurs) {
+    for (let i = game.dinosaurs.length - 1; i >= 0; i--) {
+        const dino = game.dinosaurs[i];
         const speedFactor = dino.baseSpeed + (game.gameTime / 1000);
-        const catchUpBoost = game.player.stunned ? 2.0 : 0.4;
-        
-        // If the player is not stunned, dinos will close but they won't fully reach the player
-        if (!game.player.stunned) {
-            // keep a comfortable buffer (they stay behind unless the player trips)
-            dino.z = Math.max(60, dino.z - speedFactor * 0.45 * (1 + game.gameTime / 20000));
-        } else {
-            // When player is stunned, dinos aggressively close the gap
-            dino.z -= (speedFactor + catchUpBoost) * (1 + game.gameTime / 20000);
-        }
+        const desiredZ = game.player.stunned ? 18 : 92 + Math.sin(game.gameTime * 0.016) * 5;
+        const smoothing = Math.min(0.24, 0.08 + speedFactor * 0.01);
+        dino.z += (desiredZ - dino.z) * smoothing;
 
-        // Slight lateral nudging so dinos aim toward the path center
-        const targetX = canvas.width / 2 + game.pathOffset - 80;
-        if (dino.x < targetX) {
-            dino.x += Math.min(2.5, speedFactor * 0.5);
-        } else if (dino.x > targetX) {
-            dino.x -= Math.min(2.5, speedFactor * 0.5);
-        }
-        
-        // Only capture when the player is stunned and the dino is extremely close
-        const captureDistance = 28;
-        if (game.player.stunned && dino.z <= captureDistance) {
-            game.state = GAME_STATE.GAME_OVER;
+        const centerX = canvas.width / 2 + game.pathOffset;
+        const playerY = game.player.y;
+        const desiredX = createLanePosition(game.player.lane, centerX, playerY + 24 + dino.z * 0.22);
+        const lateralSpeed = Math.min(3.0, speedFactor * 0.6);
+        if (dino.x < desiredX - 2) dino.x += lateralSpeed;
+        else if (dino.x > desiredX + 2) dino.x -= lateralSpeed;
+
+        if (dino.z < 0) {
+            dino.z = 0;
         }
     }
+}
+
+function spawnDinosaur() {
+    // Spawn a new dinosaur behind the player
+    const lane = Math.floor(Math.random() * 3);
+    const centerX = canvas.width / 2 + game.pathOffset;
+    const playerY = game.player.y;
+    const spawnZ = 90 + Math.random() * 30;
+    const x = createLanePosition(lane, centerX, playerY);
+    const newDino = {
+        x: x,
+        y: 280,
+        width: 64,
+        height: 64,
+        baseSpeed: 2.4 + Math.random() * 1.0,
+        z: spawnZ
+    };
+    game.dinosaurs.push(newDino);
 }
 
 function updatePlayer() {
@@ -821,8 +943,8 @@ function updatePlayer() {
         // small tumble physics
         game.player.velocityY += game.player.gravity * 0.5;
         game.player.y += game.player.velocityY;
-        if (game.player.y > 340) {
-            game.player.y = 340;
+        if (game.player.y > 450) {
+            game.player.y = 450;
             game.player.velocityY = 0;
         }
         if (game.player.stunTimer <= 0) {
@@ -851,6 +973,7 @@ function updatePlayer() {
         game.player.isJumping = true;
         game.keys['ArrowUp'] = false;
         game.keys[' '] = false;
+        playSoundEffect(560, 120, 'jump');
     }
     
     // Apply gravity
@@ -858,7 +981,7 @@ function updatePlayer() {
     game.player.y += game.player.velocityY;
     
     // Ground collision - keep player on ground
-    const groundLevel = 320;
+    const groundLevel = 450;
     if (game.player.y >= groundLevel) {
         game.player.y = groundLevel;
         game.player.velocityY = 0;
@@ -920,13 +1043,19 @@ function checkCollisions() {
         let obstacle = game.obstacles[i];
         // Collision if obstacle is near the player zone and in same lane
         if (obstacle.z < 30 && obstacle.z > -30 && obstacle.lane === game.player.lane) {
-            // If not jumping high enough, player trips and is stunned briefly
+            // If not jumping high enough, player trips and stumbles
             if (game.player.y > 300 && !game.player.stunned) {
+                game.player.trips = (game.player.trips || 0) + 1;
                 game.player.stunned = true;
-                game.player.stunTimer = game.player.stunDuration;
-                playMarioSound(220, 400, 'message');
-                // remove the obstacle so it doesn't trip repeatedly
+                game.player.stunTimer = 60;
+                game.player.slowTimer = 120;
+                game.speedScale = 0.6;
+                playSoundEffect(260, 180, 'hit');
                 game.obstacles.splice(i, 1);
+
+                if (game.player.trips >= 2) {
+                    game.state = GAME_STATE.GAME_OVER;
+                }
             }
         }
     }
@@ -938,16 +1067,82 @@ function checkCollisions() {
         if (coin.z > 360 && coin.z < 400 && coin.lane === game.player.lane && !coin.collected) {
             coin.collected = true;
             game.coinsCollected += 1;
+            game.wallet += 1;
             game.coins.splice(i, 1);
+            playSoundEffect(920, 140, 'coin');
         }
     }
     
     // Check if dinosaurs caught you (game over) based on their z distance
     for (let dino of game.dinosaurs) {
-        if (dino.z <= 40) {
-            game.state = GAME_STATE.GAME_OVER;
+        const captureDistance = 28;
+        if (dino.z <= captureDistance) {
+            const jumpClearY = 280;
+            const playerAirborne = game.player.y < jumpClearY || game.player.isJumping;
+            if (!playerAirborne) {
+                game.state = GAME_STATE.GAME_OVER;
+            }
         }
     }
+}
+
+// Monkeys: visual NPCs that occasionally run across lanes
+function spawnMonkey() {
+    const lane = Math.floor(Math.random() * 3);
+    const centerX = canvas.width / 2 + game.pathOffset;
+    const spawnZ = 520 + Math.random() * 80;
+    const spawnY = projectZ(spawnZ);
+    const x = createLanePosition(lane, centerX, spawnY);
+    game.monkeys.push({
+        lane: lane,
+        x: x,
+        z: spawnZ,
+        dir: Math.random() < 0.5 ? -1 : 1,
+        wobble: Math.random() * Math.PI * 2
+    });
+}
+
+function updateMonkeys() {
+    for (let i = game.monkeys.length - 1; i >= 0; i--) {
+        const m = game.monkeys[i];
+        // monkeys move forward with the world
+        m.z -= game.speed * 0.9;
+        m.wobble += 0.08;
+        // small lateral sway
+        m.x += Math.sin(m.wobble) * 0.6 * m.dir;
+        if (m.z < -80) game.monkeys.splice(i, 1);
+    }
+}
+
+function drawMonkey(monkey) {
+    const centerX = canvas.width / 2 + game.pathOffset;
+    const screenY = projectZ(monkey.z);
+    if (screenY <= 120 || screenY >= canvas.height) return;
+    const scale = Math.max(0.35, 1 - monkey.z / 600);
+    const x = monkey.x;
+    const y = screenY - 10 * scale;
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 18 * scale, 10 * scale, 4 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // body
+    ctx.fillStyle = '#6b3f1a';
+    ctx.beginPath();
+    ctx.ellipse(x, y, 10 * scale, 14 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // head
+    ctx.fillStyle = '#8b5a33';
+    ctx.beginPath();
+    ctx.arc(x + 8 * scale, y - 8 * scale, 6 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    // tail
+    ctx.strokeStyle = '#6b3f1a';
+    ctx.lineWidth = 2 * scale;
+    ctx.beginPath();
+    ctx.moveTo(x - 8 * scale, y + 2 * scale);
+    ctx.quadraticCurveTo(x - 18 * scale, y - 6 * scale, x - 12 * scale, y - 14 * scale);
+    ctx.stroke();
 }
 
 function drawGameOverScreen() {
@@ -978,6 +1173,8 @@ function drawGameOverScreen() {
 function draw() {
     if (game.state === GAME_STATE.WELCOME) {
         drawWelcomeScreen();
+    } else if (game.state === GAME_STATE.SHOP) {
+        drawShopScreen();
     } else if (game.state === GAME_STATE.PLAYING) {
         drawGameScreen();
     } else if (game.state === GAME_STATE.GAME_OVER) {
