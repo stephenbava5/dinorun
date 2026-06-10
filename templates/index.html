@@ -7,13 +7,79 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <div class="parallax">
-            <div class="layer layer-far"></div>
-            <div class="layer layer-mid"></div>
-            <div class="layer layer-near"></div>
+    <div class="app-shell">
+        <div class="left-panel">
+            <div class="game-frame">
+                <div class="top-bar">
+                    <div class="top-bar__title">Dino Run</div>
+                    <div class="top-bar__stats">
+                        <div class="stat-card">
+                            <span class="stat-label">DISTANCE</span>
+                            <span id="hud-distance" class="stat-value">0m</span>
+                        </div>
+                        <div class="stat-card stat-card--secondary">
+                            <span class="stat-label">BEST</span>
+                            <span id="hud-best" class="stat-value">0m</span>
+                        </div>
+                    </div>
+                    <div class="pause-pill">▌▌</div>
+                </div>
+
+                <div class="game-wrapper">
+                    <div class="parallax">
+                        <div class="layer layer-far"></div>
+                        <div class="layer layer-mid"></div>
+                        <div class="layer layer-near"></div>
+                    </div>
+                    <canvas id="gameCanvas" width="800" height="600"></canvas>
+                    <div class="guide-panel">
+                        <div class="guide-card">
+                            <span class="guide-title">JUMP</span>
+                            <div class="guide-action">↑</div>
+                        </div>
+                        <div class="guide-card">
+                            <span class="guide-title">SLIDE</span>
+                            <div class="guide-action">↓</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="footer-actions">
+                <button class="action-button">HOME</button>
+                <button class="action-button">MISSIONS</button>
+                <button class="action-button action-button--primary">PLAY</button>
+                <button class="action-button">SHOP</button>
+                <button class="action-button">SETTINGS</button>
+            </div>
         </div>
-        <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+        <aside class="shop-panel">
+            <div class="shop-header">
+                <div>
+                    <div class="shop-label">SHOP</div>
+                    <div class="shop-subtitle">Skins • Power-Ups • Coins</div>
+                </div>
+                <div class="shop-wallet">1250</div>
+            </div>
+
+            <div class="shop-tabs">
+                <button class="shop-tab shop-tab--active">SKINS</button>
+                <button class="shop-tab">POWER-UPS</button>
+                <button class="shop-tab">COINS</button>
+            </div>
+
+            <div class="shop-grid">
+                <div class="shop-card">Godzilla<br><span class="shop-cost">1500</span></div>
+                <div class="shop-card">King Kong<br><span class="shop-cost">1500</span></div>
+                <div class="shop-card">Homer<br><span class="shop-cost">1200</span></div>
+                <div class="shop-card">Bart<br><span class="shop-cost">1200</span></div>
+                <div class="shop-card">SpongeBob<br><span class="shop-cost">1200</span></div>
+                <div class="shop-card">Donald Trump<br><span class="shop-cost">1500</span></div>
+                <div class="shop-card">Bat<br><span class="shop-cost">500</span></div>
+                <div class="shop-card">Skateboard<br><span class="shop-cost">500</span></div>
+            </div>
+        </aside>
     </div>
     <script src="{{ url_for('static', filename='game.js') }}"></script>
 </body>

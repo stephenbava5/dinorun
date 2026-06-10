@@ -4,6 +4,24 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// Screenshot background support
+const scriptBase = (() => {
+    const script = document.currentScript;
+    if (script) {
+        return script.src.substring(0, script.src.lastIndexOf('/') + 1);
+    }
+    return '/static/';
+})();
+const screenshotImage = new Image();
+let screenshotLoaded = false;
+screenshotImage.onload = () => {
+    screenshotLoaded = true;
+};
+screenshotImage.onerror = () => {
+    screenshotLoaded = false;
+};
+screenshotImage.src = scriptBase + 'img/dino-screenshot.png';
+
 // Jungle-themed colors
 const colors = {
     darkGreen: '#1e3d1f',
@@ -33,6 +51,7 @@ const game = {
     gameTime: 0,
     speed: 5,
     wallet: 0,
+    bestDistance: 0,
     selectedSkin: 'default',
     skins: [
         { id: 'default', name: 'Runner', cost: 0, unlocked: true },
@@ -223,6 +242,21 @@ function startGame() {
 
 
 // Draw functions
+function drawScreenshotBackground() {
+    if (!screenshotLoaded) return;
+
+    const ratio = Math.min(canvas.width / screenshotImage.width, canvas.height / screenshotImage.height);
+    const width = screenshotImage.width * ratio;
+    const height = screenshotImage.height * ratio;
+    const x = (canvas.width - width) / 2;
+    const y = (canvas.height - height) / 2;
+
+    ctx.save();
+    ctx.globalAlpha = 0.6;
+    ctx.drawImage(screenshotImage, x, y, width, height);
+    ctx.restore();
+}
+
 function drawWelcomeScreen() {
     // Sky gradient background
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
@@ -231,6 +265,7 @@ function drawWelcomeScreen() {
     gradient.addColorStop(1, '#121e12');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    drawScreenshotBackground();
     
     // Draw temple scenery
     drawTempleRuins(0);
@@ -440,6 +475,8 @@ function drawShopSkinPreview(cx, cy, skinId) {
 }
 
 function drawGameScreen() {
+    drawScreenshotBackground();
+
     // Update parallax layers behind the canvas
     updateParallaxLayers();
 
@@ -932,6 +969,7 @@ function update() {
     if (game.state === GAME_STATE.PLAYING) {
         game.gameTime++;
         game.score = Math.floor(game.gameTime / 20); // Display distance in meters
+        if (game.score > game.bestDistance) game.bestDistance = game.score;
         
         // Increase speed over time - dinosaurs get faster!
         const baseSpeed = 5 + (game.gameTime / 400);
@@ -1268,9 +1306,25 @@ function draw() {
 }
 
 // Main game loop
+function updateHtmlHud() {
+    const distanceEl = document.getElementById('hud-distance');
+    const bestEl = document.getElementById('hud-best');
+    const walletEl = document.querySelector('.shop-wallet');
+    if (distanceEl) {
+        distanceEl.textContent = `${game.score}m`;
+    }
+    if (bestEl) {
+        bestEl.textContent = `${game.bestDistance}m`;
+    }
+    if (walletEl) {
+        walletEl.textContent = game.wallet;
+    }
+}
+
 function gameLoop() {
     update();
     draw();
+    updateHtmlHud();
     requestAnimationFrame(gameLoop);
 }
 

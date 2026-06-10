@@ -1,5 +1,4 @@
-/* Dino Run Game Styles - Temple Run Version */
-
+/* Dino Run Game Styles - Screenshot-inspired UI */
 * {
     margin: 0;
     padding: 0;
@@ -8,46 +7,115 @@
 
 body {
     width: 100%;
-    height: 100vh;
+    min-height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
-    background: radial-gradient(circle at top, #264433 0%, #15221c 35%, #0e1811 100%);
+    background: radial-gradient(circle at top, #f5f5f2 0%, #d7d7d5 25%, #c1c1bf 42%, #1b1e20 100%);
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #f5f5f5;
     overflow: hidden;
 }
 
-.container {
-    position: relative;
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
+.app-shell {
+    width: min(1320px, 96vw);
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 24px;
+    padding: 20px;
+}
+
+.left-panel, .shop-panel {
+    border-radius: 24px;
+    background: rgba(18, 22, 23, 0.96);
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.24);
+    overflow: hidden;
+}
+
+.game-frame {
+    padding: 20px;
+}
+
+.top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px;
     border-radius: 18px;
-    overflow: hidden;
-    border: 3px solid rgba(255,255,255,0.12);
-    background: radial-gradient(circle at top, rgba(255,255,255,0.08), transparent 40%);
+    background: rgba(12, 18, 23, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 16px;
 }
 
-/* Fixed container size to match canvas for consistent layering */
-.container {
-    width: 800px;
-    height: 600px;
+.top-bar__title {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #f8fcff;
 }
 
-#gameCanvas {
+.top-bar__stats {
+    display: flex;
+    gap: 14px;
+}
+
+.stat-card {
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    min-width: 110px;
+}
+
+.stat-card--secondary {
+    background: rgba(245, 194, 71, 0.08);
+}
+
+.stat-label {
     display: block;
-    background: radial-gradient(circle at top, #3a6070 0%, #1f3d27 45%, #121e12 100%);
-    cursor: crosshair;
-    position: relative;
-    z-index: 2;
-    box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.35);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    color: #c7c7c7;
+    margin-bottom: 6px;
 }
 
-/* Parallax layers behind the canvas */
+.stat-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.pause-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 36px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: 18px;
+    color: #ffffff;
+}
+
+.game-wrapper {
+    position: relative;
+    width: 100%;
+    height: 620px;
+    overflow: hidden;
+    border-radius: 24px;
+    background: #0a1110;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .parallax {
     position: absolute;
     inset: 0;
     overflow: hidden;
     z-index: 0;
 }
+
 .parallax .layer {
     position: absolute;
     left: 0;
@@ -56,18 +124,20 @@ body {
     height: 100%;
     background-repeat: repeat-x;
     background-position: 0 bottom;
-    will-change: transform;
     transform: translate3d(0,0,0);
 }
+
 .parallax .layer-far {
     background-image: url('img/bg_far.svg');
-    opacity: 0.95;
-    filter: blur(0.2px) saturate(0.95);
+    opacity: 0.96;
+    filter: blur(0.4px) saturate(0.96);
 }
+
 .parallax .layer-mid {
     background-image: url('img/bg_mid.svg');
     opacity: 0.98;
 }
+
 .parallax .layer-near {
     background-image: url('img/ground_near.svg');
     background-size: auto 140%;
@@ -77,15 +147,165 @@ body {
     top: auto;
 }
 
-/* Instructions that might appear */
-.info {
+#gameCanvas {
+    position: relative;
+    z-index: 2;
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 24px;
+    background: transparent;
+}
+
+.guide-panel {
     position: absolute;
-    top: 20px;
-    left: 20px;
-    color: white;
+    left: 24px;
+    top: 220px;
+    display: grid;
+    gap: 14px;
+    z-index: 3;
+}
+
+.guide-card {
+    padding: 14px 16px;
+    width: 120px;
+    background: rgba(8, 15, 14, 0.88);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.guide-title {
+    display: block;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #9db3b1;
+    margin-bottom: 10px;
+}
+
+.guide-action {
+    width: 100%;
+    height: 40px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    display: grid;
+    place-items: center;
+    color: #ffffff;
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.footer-actions {
+    display: flex;
+    gap: 14px;
+    padding: 22px;
+    justify-content: space-between;
+    background: rgba(15, 23, 22, 0.86);
+}
+
+.action-button {
+    flex: 1;
+    border: none;
+    border-radius: 14px;
+    padding: 18px 0;
     font-size: 14px;
-    background: rgba(0, 0, 0, 0.5);
-    padding: 10px 15px;
-    border-radius: 5px;
-    z-index: 10;
+    font-weight: 700;
+    color: #d4d7d5;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    transition: transform 150ms ease, background 150ms ease;
+}
+
+.action-button--primary {
+    color: #f9f7f0;
+    background: #3f7934;
+}
+
+.action-button:hover {
+    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.shop-panel {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.shop-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.shop-label {
+    color: #f5f5f3;
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+}
+
+.shop-subtitle {
+    color: #99a8a4;
+    font-size: 13px;
+    margin-top: 6px;
+}
+
+.shop-wallet {
+    padding: 14px 18px;
+    border-radius: 18px;
+    background: #332e20;
+    color: #f0d96f;
+    font-weight: 700;
+    min-width: 88px;
+    text-align: center;
+}
+
+.shop-tabs {
+    display: flex;
+    gap: 10px;
+}
+
+.shop-tab {
+    flex: 1;
+    border: none;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #c7d0ce;
+    padding: 12px 0;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.shop-tab--active {
+    background: #2f4341;
+    color: #f9f8f3;
+}
+
+.shop-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.shop-card {
+    min-height: 128px;
+    padding: 18px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #f3f3f3;
+    font-weight: 700;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.shop-cost {
+    display: inline-block;
+    font-size: 18px;
+    color: #f3c54f;
+    margin-top: 8px;
 }
