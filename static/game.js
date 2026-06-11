@@ -1,26 +1,11 @@
 // Dino Run Game - Timber Run Style!
 // Run away from dinosaurs! Jump over obstacles and collect coins!
+// LIVE UPDATED VERSION - should be visible on every reload.
+
+console.log('Loaded updated static/game.js v3');
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-
-// Screenshot background support
-const scriptBase = (() => {
-    const script = document.currentScript;
-    if (script) {
-        return script.src.substring(0, script.src.lastIndexOf('/') + 1);
-    }
-    return '/static/';
-})();
-const screenshotImage = new Image();
-let screenshotLoaded = false;
-screenshotImage.onload = () => {
-    screenshotLoaded = true;
-};
-screenshotImage.onerror = () => {
-    screenshotLoaded = false;
-};
-screenshotImage.src = scriptBase + 'img/dino-screenshot.png';
 
 // Jungle-themed colors
 const colors = {
@@ -67,7 +52,7 @@ const game = {
     // Player object - human running away (now can be stunned)
     player: {
         lane: 1, // 0 = left, 1 = middle, 2 = right
-        y: 450, // Position on screen (running in place near the foreground)
+        y: 320, // Position on screen (running farther up the path)
         width: 40,
         height: 60,
         velocityY: 0,
@@ -100,6 +85,21 @@ const game = {
     scrollOffset: 0,
     // Speed scale applied when slowed by obstacles
     speedScale: 1,
+
+    // Catch comments for funny game overs
+    catchComments: [
+        'Uh oh, that dino thinks your sneakers are a yummy side dish.',
+        'Watch out! You just became the world\'s funniest dino taco.',
+        'The dino says: "That explorer brought his own poop jokes, but I ate him anyway!"',
+        'It was a poop joke parade... until the dino showed up.',
+        'You tripped and the dino got the last laugh. That\'s a no-poop zone! (well, sort of)',
+        'Someone call the dinosaur plumber, you just got flushed out of the race.',
+        'Dino says: "No toilet paper? No problem. You\'re on the menu."',
+        'The dinosaur thinks your wallet tastes like gummy worms.',
+        'You just got snackified by a dinosaur with a potty sense of humor.',
+        'That was a dino-mite trip. Now you\'re dino dinner!'
+    ],
+    lastCatchComment: '',
     
     // Keyboard input tracking
     keys: {
@@ -219,16 +219,18 @@ function startGame() {
     game.scrollOffset = 0;
     game.pathOffset = 0;
     game.speedScale = 1;
+    game.lastCatchComment = '';
     
     // Reset player position
     game.player.lane = 1;
-    game.player.y = 450;
+    game.player.y = 320;
     game.player.velocityY = 0;
     game.player.isJumping = false;
     game.player.stunned = false;
     game.player.stunTimer = 0;
     game.player.slowTimer = 0;
     game.player.trips = 0;
+    game.lastCatchComment = '';
     
     // Reset dinosaurs
     const centerX = canvas.width / 2 + game.pathOffset;
@@ -242,21 +244,6 @@ function startGame() {
 
 
 // Draw functions
-function drawScreenshotBackground() {
-    if (!screenshotLoaded) return;
-
-    const ratio = Math.min(canvas.width / screenshotImage.width, canvas.height / screenshotImage.height);
-    const width = screenshotImage.width * ratio;
-    const height = screenshotImage.height * ratio;
-    const x = (canvas.width - width) / 2;
-    const y = (canvas.height - height) / 2;
-
-    ctx.save();
-    ctx.globalAlpha = 0.6;
-    ctx.drawImage(screenshotImage, x, y, width, height);
-    ctx.restore();
-}
-
 function drawWelcomeScreen() {
     // Sky gradient background
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
@@ -265,7 +252,6 @@ function drawWelcomeScreen() {
     gradient.addColorStop(1, '#121e12');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    drawScreenshotBackground();
     
     // Draw temple scenery
     drawTempleRuins(0);
@@ -475,8 +461,6 @@ function drawShopSkinPreview(cx, cy, skinId) {
 }
 
 function drawGameScreen() {
-    drawScreenshotBackground();
-
     // Update parallax layers behind the canvas
     updateParallaxLayers();
 
@@ -536,53 +520,58 @@ function drawGameScreen() {
     const nearest = Math.min(...game.dinosaurs.map(d => Math.max(0, Math.floor(d.z))));
     ctx.fillText(`Chaser Dist: ${nearest}m`, 20, 160);
 
+    if (game.player.stunned) {
+        ctx.fillStyle = 'rgba(255, 80, 80, 0.95)';
+        ctx.font = 'bold 30px Arial';
+        ctx.fillText('DINO HUNTERS CLOSING IN!', canvas.width / 2 - 260, 200);
+    }
+
     ctx.restore();
 }
 
 function drawPath() {
     const centerX = canvas.width / 2 + game.pathOffset;
     const horizonY = 140;
-    const legs = 16;
+    const bottomY = canvas.height - 40;
 
-    for (let i = 0; i < legs; i++) {
-        const t = i / (legs - 1);
-        const screenY = horizonY + t * (canvas.height - horizonY - 40);
-        const nextY = horizonY + (i + 1) / (legs - 1) * (canvas.height - horizonY - 40);
-        const width1 = 100 + t * 320;
-        const width2 = 100 + ((i + 1) / (legs - 1)) * 320;
+    // Main path body as a stable board surface
+    ctx.fillStyle = '#c79d4e';
+    ctx.beginPath();
+    ctx.moveTo(centerX - 70, horizonY);
+    ctx.lineTo(centerX + 70, horizonY);
+    ctx.lineTo(centerX + 320, bottomY);
+    ctx.lineTo(centerX - 320, bottomY);
+    ctx.closePath();
+    ctx.fill();
 
-        ctx.fillStyle = i % 2 === 0 ? '#5b451f' : '#6d5731';
-        ctx.beginPath();
-        ctx.moveTo(centerX - width1 / 2, screenY);
-        ctx.lineTo(centerX + width1 / 2, screenY);
-        ctx.lineTo(centerX + width2 / 2, nextY);
-        ctx.lineTo(centerX - width2 / 2, nextY);
-        ctx.closePath();
-        ctx.fill();
+    // Path border rails
+    ctx.strokeStyle = '#7d582c';
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(centerX - 70, horizonY);
+    ctx.lineTo(centerX - 320, bottomY);
+    ctx.moveTo(centerX + 70, horizonY);
+    ctx.lineTo(centerX + 320, bottomY);
+    ctx.stroke();
 
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.22)';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(centerX - width1 / 2, screenY);
-        ctx.lineTo(centerX - width2 / 2, nextY);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(centerX + width1 / 2, screenY);
-        ctx.lineTo(centerX + width2 / 2, nextY);
-        ctx.stroke();
+    // Center guideline
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(centerX, horizonY);
+    ctx.lineTo(centerX, bottomY);
+    ctx.stroke();
 
-        ctx.strokeStyle = 'rgba(245, 210, 125, 0.35)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([14, 18]);
+    // Subtle depth lines to keep the board visually stable
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+    ctx.lineWidth = 1;
+    for (let y = horizonY + 40; y < bottomY; y += 40) {
+        const t = (y - horizonY) / (bottomY - horizonY);
+        const width = 70 + t * 250;
         ctx.beginPath();
-        ctx.moveTo(centerX - width1 / 6, screenY);
-        ctx.lineTo(centerX - width2 / 6, nextY);
+        ctx.moveTo(centerX - width, y);
+        ctx.lineTo(centerX + width, y);
         ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(centerX + width1 / 6, screenY);
-        ctx.lineTo(centerX + width2 / 6, nextY);
-        ctx.stroke();
-        ctx.setLineDash([]);
     }
 }
 
@@ -1022,17 +1011,21 @@ function update() {
 function updateDinosaurs() {
     for (let i = game.dinosaurs.length - 1; i >= 0; i--) {
         const dino = game.dinosaurs[i];
-        const speedFactor = dino.baseSpeed + (game.gameTime / 1000);
-        const desiredZ = game.player.stunned ? 18 : 92 + Math.sin(game.gameTime * 0.016) * 5;
-        const smoothing = Math.min(0.24, 0.08 + speedFactor * 0.01);
-        dino.z += (desiredZ - dino.z) * smoothing;
+        const baseDinoSpeed = Math.max(3.5, game.speed * 0.88);
+        let zSpeed = baseDinoSpeed;
+
+        if (game.player.stunned) {
+            const tripFactor = Math.min(0.65, 0.22 + game.player.trips * 0.14);
+            zSpeed = game.speed * (0.94 + tripFactor);
+        }
+
+        dino.z -= zSpeed;
 
         const centerX = canvas.width / 2 + game.pathOffset;
-        const playerY = game.player.y;
-        const desiredX = createLanePosition(game.player.lane, centerX, playerY + 24 + dino.z * 0.22);
-        const lateralSpeed = Math.min(3.0, speedFactor * 0.6);
-        if (dino.x < desiredX - 2) dino.x += lateralSpeed;
-        else if (dino.x > desiredX + 2) dino.x -= lateralSpeed;
+        const desiredX = createLanePosition(game.player.lane, centerX, game.player.y + 24);
+        const lateralSpeed = Math.min(2.2, game.speed * 0.33);
+        if (dino.x < desiredX - 3) dino.x += lateralSpeed;
+        else if (dino.x > desiredX + 3) dino.x -= lateralSpeed;
 
         if (dino.z < 0) {
             dino.z = 0;
@@ -1065,8 +1058,9 @@ function updatePlayer() {
         // small tumble physics
         game.player.velocityY += game.player.gravity * 0.5;
         game.player.y += game.player.velocityY;
-        if (game.player.y > 450) {
-            game.player.y = 450;
+        const groundLevel = 320;
+        if (game.player.y > groundLevel) {
+            game.player.y = groundLevel;
             game.player.velocityY = 0;
         }
         if (game.player.stunTimer <= 0) {
@@ -1103,7 +1097,7 @@ function updatePlayer() {
     game.player.y += game.player.velocityY;
     
     // Ground collision - keep player on ground
-    const groundLevel = 450;
+    const groundLevel = 320;
     if (game.player.y >= groundLevel) {
         game.player.y = groundLevel;
         game.player.velocityY = 0;
@@ -1169,15 +1163,11 @@ function checkCollisions() {
             if (game.player.y > 300 && !game.player.stunned) {
                 game.player.trips = (game.player.trips || 0) + 1;
                 game.player.stunned = true;
-                game.player.stunTimer = 60;
-                game.player.slowTimer = 120;
-                game.speedScale = 0.6;
+                game.player.stunTimer = 70 + game.player.trips * 20;
+                game.player.slowTimer = 130 + game.player.trips * 20;
+                game.speedScale = 0.45;
                 playSoundEffect(260, 180, 'hit');
                 game.obstacles.splice(i, 1);
-
-                if (game.player.trips >= 2) {
-                    game.state = GAME_STATE.GAME_OVER;
-                }
             }
         }
     }
@@ -1186,7 +1176,7 @@ function checkCollisions() {
     for (let i = game.coins.length - 1; i >= 0; i--) {
         const coin = game.coins[i];
         // Collect if coin is at player's zone and in same lane
-        if (coin.z > 360 && coin.z < 400 && coin.lane === game.player.lane && !coin.collected) {
+        if (coin.z > 280 && coin.z < 320 && coin.lane === game.player.lane && !coin.collected) {
             coin.collected = true;
             game.coinsCollected += 1;
             game.wallet += 1;
@@ -1199,10 +1189,16 @@ function checkCollisions() {
     for (let dino of game.dinosaurs) {
         const captureDistance = 28;
         if (dino.z <= captureDistance) {
-            const jumpClearY = 280;
+            const jumpClearY = 260;
             const playerAirborne = game.player.y < jumpClearY || game.player.isJumping;
             if (!playerAirborne) {
-                game.state = GAME_STATE.GAME_OVER;
+                if (game.player.trips >= 2) {
+                    game.lastCatchComment = game.catchComments[Math.floor(Math.random() * game.catchComments.length)];
+                    game.state = GAME_STATE.GAME_OVER;
+                } else {
+                    // Give the dinos a warning distance, but don't end the game until two trips.
+                    dino.z = 32;
+                }
             }
         }
     }
@@ -1289,6 +1285,12 @@ function drawGameOverScreen() {
     ctx.font = '24px Arial';
     ctx.fillText('Press SPACE to Run Again', canvas.width / 2, 400);
     ctx.fillText('or ESC to Return to Menu', canvas.width / 2, 450);
+
+    if (game.lastCatchComment) {
+        ctx.font = '22px Arial';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.fillText(game.lastCatchComment, canvas.width / 2, 350);
+    }
 }
 
 // Main draw function
